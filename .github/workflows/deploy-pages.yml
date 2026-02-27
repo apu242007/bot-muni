@@ -1,6 +1,6 @@
 name: Deploy GitHub Pages
 
-on:
+"on":
   push:
     branches: [main]
   workflow_dispatch:   # permite lanzarlo manualmente desde la UI
@@ -16,9 +16,6 @@ concurrency:
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
