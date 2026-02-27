@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<!--
+=============================================================
+  BOT-MUNI — Interfaz de prueba web (reemplaza WhatsApp)
+=============================================================
+
+CONFIGURACIÓN RÁPIDA
+──────────────────────────────────────────────────────────────
+1. Abrí este archivo en tu navegador (o servilo desde GitHub Pages).
+2. En la barra de configuración superior:
+   a) Pegá la URL base de tu backend FastAPI  →  p. ej. http://localhost:8000
+   b) Ingresá el número de teléfono a simular →  p. ej. 5491134567890
+   c) Pegá el valor de TEST_API_KEY del .env  →  (quedará guardado en localStorage)
+   d) Hacé clic en "Testear" para verificar que el backend responde.
+3. ¡Listo! Escribí mensajes o grabá audio.
+
+DEPLOY EN GITHUB PAGES
+──────────────────────────────────────────────────────────────
+1. Subí este archivo a la raíz de tu repositorio (ya está ahí si lo commiteás):
+       git add index.html
+       git commit -m "feat: add web chat testing UI"
+       git push origin main
+2. Andá a Settings → Pages → Source: main / (root) → Save.
+3. Tu URL será:  https://<tu-usuario>.github.io/<repo-name>/
+
+USAR CON NGROK (exponer backend local a web)
+──────────────────────────────────────────────────────────────
+Requisitos: ngrok instalado  →  https://ngrok.com/download
+
+Comando:
+   ngrok http 8000
+
+Ngrok te dará una URL como:  https://a1b2-200-60-10-50.ngrok-free.app
+Pegala en el campo "URL del backend" de esta interfaz.
+
+NOTA SOBRE /test/audio
+──────────────────────────────────────────────────────────────
+El endpoint POST /test/audio NO está implementado aún en el backend.
+Al grabar un audio, la interfaz lo intentará enviar y mostrará el error
+del servidor con indicaciones para implementarlo.
+=============================================================
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOT-MUNI · Chat Tester</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ──────────────────────────────────────────────────────────
+       RESET & TOKENS
+    ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --wa-dark:       #075e54;
+      --wa-dark-2:     #054c44;
+      --wa-teal:       #128c7e;
+      --wa-green:      #25d366;
+      --wa-light-bg:   #ece5dd;
+      --wa-msg-out:    #dcf8c6;
+      --wa-msg-in:     #ffffff;
+      --wa-msg-err:    #ffd7d7;
+      --wa-text-dark:  #111b21;
+      --wa-text-meta:  #667781;
+      --wa-border:     #d1d7db;
+      --debug-bg:      #0d1117;
+      --debug-fg:      #39d353;
+      --debug-cyan:    #79c0ff;
+      --debug-yellow:  #e3b341;
+      --radius-sm:     6px;
+      --radius-md:     10px;
+      --radius-lg:     18px;
+      --shadow:        0 1px 3px rgba(0,0,0,.12);
+      --transition:    .18s ease;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Nunito', sans-serif;
+      font-size: 15px;
+      color: var(--wa-text-dark);
+      background: var(--wa-light-bg);
+      overflow: hidden;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       LAYOUT RAÍZ
+    ────────────────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 860px;
+      margin: 0 auto;
+      background: #fff;
+      box-shadow: 0 0 40px rgba(0,0,0,.18);
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       BARRA DE CONFIGURACIÓN
+    ────────────────────────────────────────────────────────── */
+    #config-bar {
+      background: var(--wa-dark-2);
+      padding: 10px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    #config-bar label {
+      color: rgba(255,255,255,.72);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+
+    .cfg-field {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex: 1 1 160px;
+    }
+
+    .cfg-input {
+      flex: 1;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: var(--radius-sm);
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 5px 9px;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    .cfg-input::placeholder { color: rgba(255,255,255,.4); }
+    .cfg-input:focus { border-color: var(--wa-green); }
+    .cfg-input option { background: #1a1a2e; color: #fff; }
+
+    #btn-test-conn {
+      background: rgba(255,255,255,.12);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: var(--radius-sm);
+      padding: 5px 12px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background var(--transition);
+    }
+    #btn-test-conn:hover { background: rgba(255,255,255,.22); }
+
+    #conn-indicator {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: #888;
+      flex-shrink: 0;
+      transition: background .4s;
+    }
+    #conn-indicator.online  { background: var(--wa-green); box-shadow: 0 0 6px var(--wa-green); }
+    #conn-indicator.offline { background: #f25c54; box-shadow: 0 0 6px #f25c54; }
+
+    /* ──────────────────────────────────────────────────────────
+       HEADER DEL CHAT
+    ────────────────────────────────────────────────────────── */
+    #chat-header {
+      background: var(--wa-dark);
+      color: #fff;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: var(--shadow);
+      flex-shrink: 0;
+    }
+
+    #header-avatar {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--wa-teal);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    #header-info { flex: 1; }
+    #header-name { font-weight: 700; font-size: 15px; }
+    #header-status { font-size: 12px; color: rgba(255,255,255,.72); }
+
+    #btn-toggle-debug {
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: var(--radius-sm);
+      color: rgba(255,255,255,.85);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 11px;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    #btn-toggle-debug:hover { background: rgba(255,255,255,.2); }
+    #btn-toggle-debug.active { background: #e3b341; color: #000; border-color: #e3b341; }
+
+    /* Ocultar campo de teléfono personalizado por defecto */
+    #custom-phone-wrap { display: none; }
+
+    /* Wrapper del indicador de conexión */
+    #conn-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       ÁREA DE MENSAJES
+    ────────────────────────────────────────────────────────── */
+    #chat-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      scroll-behavior: smooth;
+      /* Fondo patrón sutil inspirado en WhatsApp */
+      background-color: var(--wa-light-bg);
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='88' viewBox='0 0 88 88'%3E%3Cpath fill='%23c8b8a2' fill-opacity='0.22' d='M10 10h3v3h-3zM40 10h3v3h-3zM70 10h3v3h-3zM25 25h3v3h-3zM55 25h3v3h-3zM10 40h3v3h-3zM40 40h3v3h-3zM70 40h3v3h-3zM25 55h3v3h-3zM55 55h3v3h-3zM10 70h3v3h-3zM40 70h3v3h-3zM70 70h3v3h-3z'/%3E%3C/svg%3E");
+    }
+
+    /* Fecha del sistema */
+    .sys-msg {
+      text-align: center;
+      margin: 8px 0;
+    }
+    .sys-msg span {
+      background: rgba(255,255,255,.72);
+      color: var(--wa-text-meta);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 12px;
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+
+    /* Contenedor de burbuja */
+    .msg-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      animation: fadeUp .18s ease both;
+    }
+    .msg-row.out { flex-direction: row-reverse; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .bubble {
+      max-width: 72%;
+      padding: 7px 10px 4px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      position: relative;
+      word-break: break-word;
+      line-height: 1.45;
+    }
+
+    .msg-row.in  .bubble {
+      background: var(--wa-msg-in);
+      border-bottom-left-radius: 3px;
+    }
+    .msg-row.out .bubble {
+      background: var(--wa-msg-out);
+      border-bottom-right-radius: 3px;
+    }
+    .msg-row.err .bubble {
+      background: var(--wa-msg-err);
+      border: 1px solid #f25c54;
+    }
+
+    .bubble-text { font-size: 14.5px; }
+    .bubble-meta {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      margin-top: 3px;
+    }
+    .bubble-time {
+      font-size: 11px;
+      color: var(--wa-text-meta);
+    }
+
+    /* Ticks de WhatsApp (enviado) */
+    .tick { color: var(--wa-text-meta); font-size: 13px; }
+    .tick.delivered { color: #53bdeb; }
+
+    /* Audio inline */
+    .bubble audio {
+      display: block;
+      width: 100%;
+      min-width: 200px;
+      margin-top: 4px;
+    }
+
+    /* Typing indicator */
+    #typing-indicator {
+      display: none;
+      align-items: flex-end;
+      gap: 6px;
+      padding: 2px 0;
+    }
+    #typing-indicator.visible { display: flex; }
+    .typing-bubble {
+      background: var(--wa-msg-in);
+      border-radius: var(--radius-lg);
+      border-bottom-left-radius: 3px;
+      padding: 10px 14px;
+      box-shadow: var(--shadow);
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .typing-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--wa-text-meta);
+      animation: typingBounce 1.2s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(2) { animation-delay: .2s; }
+    .typing-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: .5; }
+      30%           { transform: translateY(-5px); opacity: 1; }
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       BARRA DE INPUT
+    ────────────────────────────────────────────────────────── */
+    #input-bar {
+      background: #f0f2f5;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-top: 1px solid var(--wa-border);
+      flex-shrink: 0;
+    }
+
+    #msg-input {
+      flex: 1;
+      background: #fff;
+      border: none;
+      border-radius: 24px;
+      padding: 9px 16px;
+      font-family: inherit;
+      font-size: 14.5px;
+      outline: none;
+      resize: none;
+      max-height: 120px;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+      line-height: 1.4;
+    }
+
+    .icon-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: none;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background var(--transition), transform .1s;
+      flex-shrink: 0;
+    }
+    .icon-btn:active { transform: scale(.9); }
+
+    #btn-send {
+      background: var(--wa-teal);
+    }
+    #btn-send:hover { background: var(--wa-dark); }
+    #btn-send svg { fill: #fff; }
+
+    #btn-mic {
+      background: #fff;
+      box-shadow: var(--shadow);
+      border: 1.5px solid var(--wa-border);
+    }
+    #btn-mic.recording {
+      background: #f25c54;
+      border-color: #f25c54;
+      animation: pulse .8s infinite;
+    }
+    #btn-mic svg { fill: #667781; }
+    #btn-mic.recording svg { fill: #fff; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(242,92,84,.5); }
+      50%       { box-shadow: 0 0 0 8px rgba(242,92,84,0); }
+    }
+
+    #rec-timer {
+      font-size: 12px;
+      font-weight: 700;
+      color: #f25c54;
+      display: none;
+      white-space: nowrap;
+    }
+    #rec-timer.visible { display: block; }
+
+    /* ──────────────────────────────────────────────────────────
+       PANEL DEBUG
+    ────────────────────────────────────────────────────────── */
+    #debug-panel {
+      background: var(--debug-bg);
+      color: var(--debug-fg);
+      font-family: 'Courier New', monospace;
+      font-size: 12.5px;
+      line-height: 1.6;
+      overflow-y: auto;
+      max-height: 0;
+      transition: max-height .3s ease;
+      flex-shrink: 0;
+      border-top: 2px solid #1f6feb;
+    }
+    #debug-panel.open { max-height: 240px; }
+
+    #debug-inner {
+      padding: 10px 14px;
+    }
+
+    #debug-title {
+      color: var(--debug-cyan);
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .debug-row { display: flex; gap: 8px; }
+    .debug-key { color: var(--debug-cyan); min-width: 130px; }
+    .debug-val { color: #f0f6fc; word-break: break-all; }
+    .debug-val.state-idle    { color: var(--debug-fg); }
+    .debug-val.state-booking { color: var(--debug-yellow); }
+    .debug-val.state-waiting { color: #ffa657; }
+
+    #btn-reset-state {
+      background: rgba(242,92,84,.15);
+      border: 1px solid #f25c54;
+      color: #f25c54;
+      border-radius: var(--radius-sm);
+      padding: 3px 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    #btn-reset-state:hover { background: rgba(242,92,84,.3); }
+
+    #debug-loading {
+      color: var(--wa-text-meta);
+      font-style: italic;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       RESPONSIVE MOBILE
+    ────────────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      #config-bar { gap: 6px; }
+      .cfg-field  { flex: 1 1 130px; }
+      .bubble     { max-width: 88%; }
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       SCROLLBAR
+    ────────────────────────────────────────────────────────── */
+    #chat-body::-webkit-scrollbar { width: 5px; }
+    #chat-body::-webkit-scrollbar-track { background: transparent; }
+    #chat-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ═══════════════════════════════════════
+       BARRA DE CONFIGURACIÓN
+  ══════════════════════════════════════════ -->
+  <div id="config-bar">
+
+    <div class="cfg-field">
+      <label for="cfg-url">🌐 Backend</label>
+      <input id="cfg-url" class="cfg-input" type="text"
+             placeholder="http://localhost:8000" spellcheck="false" autocomplete="off" />
+    </div>
+
+    <div class="cfg-field">
+      <label for="cfg-phone">📱 Teléfono</label>
+      <select id="cfg-phone" class="cfg-input">
+        <option value="5491134567890">549 11 3456-7890</option>
+        <option value="5492984123456">549 298 412-3456</option>
+        <option value="5492994654321">549 299 465-4321</option>
+        <option value="__custom__">Personalizado…</option>
+      </select>
+    </div>
+
+    <div class="cfg-field" id="custom-phone-wrap">
+      <label for="cfg-phone-custom">Número</label>
+      <input id="cfg-phone-custom" class="cfg-input" type="text"
+             placeholder="5491100000000" spellcheck="false" />
+    </div>
+
+    <div class="cfg-field">
+      <label for="cfg-apikey">🔑 API Key</label>
+      <input id="cfg-apikey" class="cfg-input" type="password"
+             placeholder="TEST_API_KEY del .env" autocomplete="off" />
+    </div>
+
+    <div id="conn-wrapper">
+      <div id="conn-indicator" title="Estado de conexión"></div>
+      <button id="btn-test-conn">Testear</button>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       HEADER DEL CHAT
+  ══════════════════════════════════════════ -->
+  <div id="chat-header">
+    <div id="header-avatar">🤖</div>
+    <div id="header-info">
+      <div id="header-name">Bot Municipal</div>
+      <div id="header-status">Subsecretaría de Capacitación</div>
+    </div>
+    <button id="btn-toggle-debug" title="Panel de debug">
+      &lt;/debug&gt;
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       MENSAJES
+  ══════════════════════════════════════════ -->
+  <div id="chat-body">
+    <!-- Mensaje inicial del sistema -->
+    <div class="sys-msg" id="sys-welcome">
+      <span>Configurá el backend y el número para comenzar</span>
+    </div>
+
+    <!-- Typing indicator -->
+    <div id="typing-indicator">
+      <div class="typing-bubble">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       BARRA DE INPUT
+  ══════════════════════════════════════════ -->
+  <div id="input-bar">
+    <!-- Botón micrófono -->
+    <button id="btn-mic" class="icon-btn" title="Grabar audio (mantenér presionado o clic para iniciar/detener)">
+      <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2H3v2a9 9 0 0 0 8 8.94V23h2v-2.06A9 9 0 0 0 21 12v-2h-2z"/>
+      </svg>
+    </button>
+
+    <!-- Timer de grabación -->
+    <div id="rec-timer">⏺ <span id="rec-time-val">0:00</span></div>
+
+    <!-- Campo de texto -->
+    <textarea id="msg-input" rows="1" placeholder="Escribí un mensaje…"></textarea>
+
+    <!-- Botón enviar -->
+    <button id="btn-send" class="icon-btn" title="Enviar">
+      <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PANEL DEBUG
+  ══════════════════════════════════════════ -->
+  <div id="debug-panel">
+    <div id="debug-inner">
+      <div id="debug-title">
+        <span>▶ Estado del Usuario</span>
+        <button id="btn-reset-state">⚠ Reset estado</button>
+      </div>
+      <div id="debug-content">
+        <div id="debug-loading">Enviá un mensaje para cargar el estado…</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────
+// ESTADO DE LA APP
+// ─────────────────────────────────────────────────────────────
+const state = {
+  messages: [],         // historial en memoria
+  isRecording: false,
+  mediaRecorder: null,
+  audioChunks: [],
+  recTimerInterval: null,
+  recSeconds: 0,
+  TIMEOUT_MS: 30_000,
+};
+
+// ─────────────────────────────────────────────────────────────
+// REFERENCIAS DOM
+// ─────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+const cfgUrl        = $('cfg-url');
+const cfgPhone      = $('cfg-phone');
+const cfgPhoneCustom= $('cfg-phone-custom');
+const customWrap    = $('custom-phone-wrap');
+const cfgApiKey     = $('cfg-apikey');
+const btnTestConn   = $('btn-test-conn');
+const connIndicator = $('conn-indicator');
+const chatBody      = $('chat-body');
+const msgInput      = $('msg-input');
+const btnSend       = $('btn-send');
+const btnMic        = $('btn-mic');
+const recTimer      = $('rec-timer');
+const recTimeVal    = $('rec-time-val');
+const typingIndicator= $('typing-indicator');
+const btnToggleDebug= $('btn-toggle-debug');
+const debugPanel    = $('debug-panel');
+const debugContent  = $('debug-content');
+const btnResetState = $('btn-reset-state');
+const headerStatus  = $('header-status');
+
+// ─────────────────────────────────────────────────────────────
+// HELPERS DE CONFIGURACIÓN
+// ─────────────────────────────────────────────────────────────
+function getBaseUrl() {
+  return (cfgUrl.value || '').replace(/\/$/, '').trim();
+}
+
+function getPhone() {
+  if (cfgPhone.value === '__custom__') return cfgPhoneCustom.value.trim();
+  return cfgPhone.value;
+}
+
+function getApiKey() {
+  return cfgApiKey.value.trim();
+}
+
+function persistConfig() {
+  localStorage.setItem('botmuni_url',    cfgUrl.value);
+  localStorage.setItem('botmuni_phone',  cfgPhone.value);
+  localStorage.setItem('botmuni_custom', cfgPhoneCustom.value);
+  localStorage.setItem('botmuni_apikey', cfgApiKey.value);
+}
+
+function loadConfig() {
+  cfgUrl.value         = localStorage.getItem('botmuni_url')    || '';
+  cfgPhoneCustom.value = localStorage.getItem('botmuni_custom') || '';
+  cfgApiKey.value      = localStorage.getItem('botmuni_apikey') || '';
+
+  const savedPhone = localStorage.getItem('botmuni_phone');
+  if (savedPhone) {
+    for (const opt of cfgPhone.options) {
+      if (opt.value === savedPhone) { cfgPhone.value = savedPhone; break; }
+    }
+  }
+  toggleCustomPhone();
+}
+
+function toggleCustomPhone() {
+  const isCustom = cfgPhone.value === '__custom__';
+  customWrap.style.display = isCustom ? 'flex' : 'none';
+}
+
+// ─────────────────────────────────────────────────────────────
+// FETCH CON TIMEOUT Y HEADERS
+// ─────────────────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), state.TIMEOUT_MS);
+
+  const headers = {
+    ...(options.headers || {}),
+    'X-Test-API-Key': getApiKey(),
+  };
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  try {
+    const res = await fetch(getBaseUrl() + path, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    clearTimeout(tid);
+    return res;
+  } catch (err) {
+    clearTimeout(tid);
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TEST DE CONEXIÓN
+// ─────────────────────────────────────────────────────────────
+async function testConnection() {
+  const url = getBaseUrl();
+  if (!url) {
+    showToast('Ingresá la URL del backend primero.', 'warn');
+    return;
+  }
+  connIndicator.className = '';
+  btnTestConn.textContent = '…';
+  btnTestConn.disabled = true;
+
+  try {
+    // FastAPI expone /docs siempre; o bien usamos /openapi.json
+    const res = await fetch(url + '/openapi.json', {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok || res.status === 403 || res.status === 422) {
+      // Servidor responde → online
+      connIndicator.className = 'online';
+      headerStatus.textContent = '● En línea';
+      showToast('Backend conectado ✓', 'ok');
+    } else {
+      connIndicator.className = 'online';
+      headerStatus.textContent = '● En línea (respuesta inesperada)';
+    }
+  } catch {
+    connIndicator.className = 'offline';
+    headerStatus.textContent = '● Sin conexión';
+    showToast('No se pudo conectar al backend.', 'err');
+  } finally {
+    btnTestConn.textContent = 'Testear';
+    btnTestConn.disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// RENDERIZADO DE MENSAJES
+// ─────────────────────────────────────────────────────────────
+function now() {
+  return new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function addSystemMsg(text) {
+  const div = document.createElement('div');
+  div.className = 'sys-msg';
+  div.innerHTML = `<span>${escHtml(text)}</span>`;
+  insertBeforeTyping(div);
+  scrollBottom();
+}
+
+function addMessage({ dir, text, audioBlob, isError }) {
+  // dir: 'in' | 'out' | 'err'
+  const row = document.createElement('div');
+  row.className = `msg-row ${isError ? 'err' : dir}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+
+  let html = '';
+
+  if (audioBlob) {
+    const audioUrl = URL.createObjectURL(audioBlob);
+    html += `<audio controls src="${audioUrl}"></audio>`;
+    if (text) html += `<div class="bubble-text" style="margin-top:5px">${escHtml(text)}</div>`;
+  } else {
+    html += `<div class="bubble-text">${escHtml(text).replace(/\n/g, '<br>')}</div>`;
+  }
+
+  html += `<div class="bubble-meta">
+    <span class="bubble-time">${now()}</span>
+    ${dir === 'out' ? '<span class="tick delivered">✓✓</span>' : ''}
+  </div>`;
+
+  bubble.innerHTML = html;
+  row.appendChild(bubble);
+  insertBeforeTyping(row);
+  scrollBottom();
+
+  state.messages.push({ dir, text, ts: new Date().toISOString() });
+}
+
+function insertBeforeTyping(el) {
+  chatBody.insertBefore(el, typingIndicator);
+}
+
+function scrollBottom() {
+  setTimeout(() => { chatBody.scrollTop = chatBody.scrollHeight; }, 50);
+}
+
+function showTyping(show) {
+  typingIndicator.classList.toggle('visible', show);
+  if (show) scrollBottom();
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENVÍO DE TEXTO
+// ─────────────────────────────────────────────────────────────
+async function sendText() {
+  const text = msgInput.value.trim();
+  if (!text) return;
+
+  const url = getBaseUrl();
+  if (!url) {
+    showToast('Configurá la URL del backend primero.', 'warn');
+    return;
+  }
+  const phone = getPhone();
+  if (!phone) {
+    showToast('Seleccioná o ingresá el número de teléfono.', 'warn');
+    return;
+  }
+
+  msgInput.value = '';
+  autoResizeInput();
+  addMessage({ dir: 'out', text });
+  showTyping(true);
+
+  try {
+    const res = await apiFetch('/test/message', {
+      method: 'POST',
+      body: JSON.stringify({ phone, text }),
+    });
+
+    showTyping(false);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      addMessage({ dir: 'in', text: `⚠ Error ${res.status}: ${errText}`, isError: true });
+      return;
+    }
+
+    const data = await res.json();
+    addMessage({ dir: 'in', text: data.reply || '(sin respuesta)' });
+    refreshDebug();
+
+  } catch (err) {
+    showTyping(false);
+    const msg = err.name === 'AbortError'
+      ? '⏱ Timeout: el backend tardó más de 30 segundos.'
+      : `🔌 Sin conexión con el backend: ${err.message}`;
+    addMessage({ dir: 'in', text: msg, isError: true });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// GRABACIÓN Y ENVÍO DE AUDIO
+// ─────────────────────────────────────────────────────────────
+async function startRecording() {
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    showToast('Tu navegador no soporta grabación de audio.', 'err');
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    if (err.name === 'NotAllowedError')
+      showToast('Permiso de micrófono denegado. Revisá la configuración del navegador.', 'err');
+    else
+      showToast('No se pudo acceder al micrófono: ' + err.message, 'err');
+    return;
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+      ? 'audio/ogg;codecs=opus'
+      : '';
+
+  state.audioChunks = [];
+  state.mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  state.mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) state.audioChunks.push(e.data);
+  };
+  state.mediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const blob = new Blob(state.audioChunks, { type: mimeType || 'audio/webm' });
+    await sendAudio(blob);
+  };
+
+  state.mediaRecorder.start();
+  state.isRecording = true;
+  btnMic.classList.add('recording');
+  recTimer.classList.add('visible');
+  state.recSeconds = 0;
+  recTimeVal.textContent = '0:00';
+  state.recTimerInterval = setInterval(() => {
+    state.recSeconds++;
+    const m = Math.floor(state.recSeconds / 60);
+    const s = state.recSeconds % 60;
+    recTimeVal.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  }, 1000);
+}
+
+function stopRecording() {
+  if (!state.isRecording || !state.mediaRecorder) return;
+  clearInterval(state.recTimerInterval);
+  state.mediaRecorder.stop();
+  state.isRecording = false;
+  btnMic.classList.remove('recording');
+  recTimer.classList.remove('visible');
+}
+
+async function sendAudio(blob) {
+  const url = getBaseUrl();
+  if (!url) { showToast('Configurá la URL del backend primero.', 'warn'); return; }
+  const phone = getPhone();
+
+  // Mostrar en chat el audio enviado
+  addMessage({ dir: 'out', text: '', audioBlob: blob });
+  showTyping(true);
+
+  try {
+    const form = new FormData();
+    form.append('phone', phone);
+    const ext  = blob.type.includes('ogg') ? 'ogg' : 'webm';
+    form.append('audio', blob, `audio.${ext}`);
+
+    const res = await apiFetch('/test/audio', {
+      method: 'POST',
+      body: form,
+    });
+
+    showTyping(false);
+
+    if (res.status === 404) {
+      addMessage({
+        dir: 'in',
+        text: '⚠ El endpoint POST /test/audio no está implementado en el backend.\n\nPara habilitarlo, agregá en app/main.py un endpoint que reciba multipart/form-data con campos "phone" y "audio", transcribe con audio.transcribe_audio_local() y responda con { "reply": "..." }.',
+        isError: true,
+      });
+      return;
+    }
+    if (!res.ok) {
+      const errText = await res.text();
+      addMessage({ dir: 'in', text: `⚠ Error ${res.status}: ${errText}`, isError: true });
+      return;
+    }
+
+    const data = await res.json();
+    addMessage({ dir: 'in', text: data.reply || '(sin respuesta)' });
+    refreshDebug();
+
+  } catch (err) {
+    showTyping(false);
+    const msg = err.name === 'AbortError'
+      ? '⏱ Timeout: el backend tardó más de 30 segundos.'
+      : `🔌 Sin conexión: ${err.message}`;
+    addMessage({ dir: 'in', text: msg, isError: true });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PANEL DEBUG
+// ─────────────────────────────────────────────────────────────
+function toggleDebug() {
+  const isOpen = debugPanel.classList.toggle('open');
+  btnToggleDebug.classList.toggle('active', isOpen);
+  if (isOpen) refreshDebug();
+}
+
+async function refreshDebug() {
+  if (!debugPanel.classList.contains('open')) return;
+
+  const url = getBaseUrl();
+  const phone = getPhone();
+  if (!url || !phone) {
+    debugContent.innerHTML = '<div id="debug-loading">Configurá URL y teléfono.</div>';
+    return;
+  }
+
+  debugContent.innerHTML = '<div id="debug-loading">Cargando…</div>';
+
+  try {
+    const res = await apiFetch(`/test/state?phone=${encodeURIComponent(phone)}`);
+
+    if (!res.ok) {
+      const t = await res.text();
+      debugContent.innerHTML = `<div style="color:#f25c54">Error ${res.status}: ${escHtml(t)}</div>`;
+      return;
+    }
+
+    const d = await res.json();
+
+    // Clase de color según estado
+    const stateClass = d.state === 'idle'        ? 'state-idle'
+                     : d.state === 'booking'     ? 'state-booking'
+                     : d.state?.includes('wait') ? 'state-waiting'
+                     : '';
+
+    // Contexto legible
+    let ctxStr = '{}';
+    try { ctxStr = JSON.stringify(d.context, null, 2); } catch {}
+
+    debugContent.innerHTML = `
+      <div class="debug-row"><span class="debug-key">📱 Teléfono:</span>   <span class="debug-val">${escHtml(d.phone || phone)}</span></div>
+      <div class="debug-row"><span class="debug-key">🔄 Estado:</span>     <span class="debug-val ${stateClass}">${escHtml(d.state || '—')}</span></div>
+      <div class="debug-row"><span class="debug-key">📦 Contexto:</span>   <span class="debug-val"><pre style="margin:0;white-space:pre-wrap">${escHtml(ctxStr)}</pre></span></div>
+      <div class="debug-row" style="margin-top:4px"><span class="debug-key">⏱ Actualizado:</span> <span class="debug-val" style="color:#888;font-size:11px">${new Date().toLocaleTimeString('es-AR')}</span></div>
+    `;
+
+  } catch (err) {
+    debugContent.innerHTML = `<div style="color:#f25c54">🔌 ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function resetState() {
+  const phone = getPhone();
+  if (!confirm(`¿Resetear el estado del usuario ${phone}?\nEsta acción no se puede deshacer.`)) return;
+
+  try {
+    const res = await apiFetch('/test/reset', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
+
+    if (res.ok) {
+      addSystemMsg(`Estado de ${phone} reseteado a "idle".`);
+      await refreshDebug();
+    } else {
+      const t = await res.text();
+      showToast(`Error al resetear: ${t}`, 'err');
+    }
+  } catch (err) {
+    showToast('Error de conexión: ' + err.message, 'err');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOAST NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+let toastTimeout;
+function showToast(msg, type = 'ok') {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.style.cssText = `
+      position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+      padding:8px 18px; border-radius:20px; font-size:13px; font-weight:700;
+      z-index:9999; white-space:nowrap; transition:opacity .3s; opacity:0;
+      font-family:'Nunito',sans-serif; pointer-events:none;
+    `;
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = type === 'ok' ? '#128c7e'
+                      : type === 'warn' ? '#e3b341'
+                      : '#f25c54';
+  el.style.color = type === 'warn' ? '#000' : '#fff';
+  el.style.opacity = '1';
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTO-RESIZE TEXTAREA
+// ─────────────────────────────────────────────────────────────
+function autoResizeInput() {
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+}
+
+// ─────────────────────────────────────────────────────────────
+// EVENT LISTENERS
+// ─────────────────────────────────────────────────────────────
+
+// Configuración → persistir al cambiar
+cfgUrl.addEventListener('input',    persistConfig);
+cfgPhone.addEventListener('change', () => {
+  toggleCustomPhone();
+  persistConfig();
+  onPhoneChange();
+});
+cfgPhoneCustom.addEventListener('input', persistConfig);
+cfgApiKey.addEventListener('input', persistConfig);
+
+function onPhoneChange() {
+  const phone = getPhone();
+  if (!phone) return;
+  // Limpiar historial visual
+  const msgNodes = chatBody.querySelectorAll('.msg-row, .sys-msg');
+  msgNodes.forEach(n => n.remove());
+  state.messages = [];
+  addSystemMsg(`Sesión iniciada como ${phone}`);
+}
+
+// Testear conexión
+btnTestConn.addEventListener('click', testConnection);
+
+// Enviar con botón
+btnSend.addEventListener('click', sendText);
+
+// Enviar con Enter (Shift+Enter = nueva línea)
+msgInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendText();
+  }
+});
+
+// Auto-resize textarea
+msgInput.addEventListener('input', autoResizeInput);
+
+// Micrófono: clic para iniciar/detener
+btnMic.addEventListener('click', () => {
+  if (state.isRecording) stopRecording();
+  else startRecording();
+});
+
+// Debug panel
+btnToggleDebug.addEventListener('click', toggleDebug);
+btnResetState.addEventListener('click', resetState);
+
+// ─────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────
+loadConfig();
+
+// Si hay URL guardada, marcar estado como desconocido
+if (cfgUrl.value) {
+  connIndicator.className = '';
+}
+</script>
+
+<!--
+═══════════════════════════════════════════════════════════════
+  INSTRUCCIONES NGROK
+═══════════════════════════════════════════════════════════════
+
+  1. Iniciá el backend FastAPI:
+       uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  2. En otra terminal, exponelo con ngrok:
+       ngrok http 8000
+
+  3. Ngrok mostrará algo como:
+       Forwarding  https://a1b2-200-60-10-50.ngrok-free.app -> localhost:8000
+
+  4. Copiá esa URL (https://...) y pegala en el campo "Backend"
+     de esta interfaz.
+
+  5. IMPORTANTE: Si usás el plan gratuito de ngrok, agregá el header
+     "ngrok-skip-browser-warning: true" o accedé una vez desde el navegador
+     para aceptar el aviso. El backend ya responderá a los requests de la UI.
+
+  6. Para el campo "API Key", usá el valor de TEST_API_KEY del .env del backend.
+
+═══════════════════════════════════════════════════════════════
+-->
+
+</body>
+</html>

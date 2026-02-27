@@ -1,0 +1,11 @@
+.env
+*.sqlite3
+*.db
+bot.sqlite3
+bot_sqlite3
+tmp/
+__pycache__/
+*.pyc
+.venv/
+venv/
+service_account.json

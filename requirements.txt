@@ -1,0 +1,17 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+requests==2.32.3
+python-dotenv==1.0.1
+pydantic==2.8.2
+google-api-python-client==2.141.0
+google-auth==2.33.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+python-dateutil==2.9.0.post0
+
+# Audio transcription (faster-whisper)
+faster-whisper==1.1.1
+av>=12.0.0                  # PyAV: decodificación de .ogg/.mp3 sin ffmpeg en PATH
+ctranslate2>=4.0,<5         # Motor de inferencia de faster-whisper
+huggingface-hub>=0.23       # Descarga de modelos Whisper
+tokenizers>=0.19            # Tokenización
